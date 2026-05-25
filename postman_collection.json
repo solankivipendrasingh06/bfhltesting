@@ -1,0 +1,119 @@
+{
+	"info": {
+		"name": "Bajaj Finserv Health Dev Challenge",
+		"description": "Postman Collection for the Bajaj Finserv Full Stack Challenge. Includes GET and POST requests for local testing.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "GET Request (Operation Code)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/api/bfhl",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"bfhl"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "POST Request (Example A)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"data\": [\"M\",\"1\",\"334\",\"4\",\"B\",\"Z\",\"a\",\"7\"],\n  \"file_b64\":\"BASE_64_STRING\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3000/api/bfhl",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"bfhl"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "POST Request (Example B)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"data\": [\"2\",\"4\",\"5\",\"92\"],\n  \"file_b64\":\"BASE_64_STRING\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3000/api/bfhl",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"bfhl"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "POST Request (Example C)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"data\": [\"A\",\"C\",\"Z\",\"c\",\"i\"]\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3000/api/bfhl",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"bfhl"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
