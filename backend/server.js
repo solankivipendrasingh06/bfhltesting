@@ -11,6 +11,10 @@ app.use(express.json());
 
 app.use('/tickets', ticketRoutes);
 
+app.get('/', (req, res) => {
+  res.json({ message: "DeskFlow API is successfully running!" });
+});
+
 // Database connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/deskflow';
 
