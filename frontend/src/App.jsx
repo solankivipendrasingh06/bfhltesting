@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/tickets';
+const API_URL = 'https://bfhltesting.onrender.com/tickets';
 
 const validTransitions = {
   open: ['in_progress'],
