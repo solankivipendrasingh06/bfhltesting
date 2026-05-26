@@ -1,8 +1,8 @@
 const express = require('express');
-const Ticket = require('../models/Ticket');
 const router = express.Router();
 
-const statusOrder = ['open', 'in_progress', 'resolved', 'closed'];
+let tickets = []; // In-memory database bypass
+let nextId = 1;
 
 const validTransitions = {
   open: ['in_progress'],
@@ -11,150 +11,137 @@ const validTransitions = {
   closed: ['resolved']
 };
 
-// POST /tickets
-router.post('/', async (req, res) => {
-  try {
-    const { subject, description, customerEmail, priority } = req.body;
-    
-    // Status defaults to open, so we don't need to pass it unless we want to, but standard says default is open.
-    const ticket = new Ticket({
-      subject,
-      description,
-      customerEmail,
-      priority,
-      status: 'open'
-    });
+const targetHours = {
+  urgent: 1,
+  high: 4,
+  medium: 24,
+  low: 72
+};
 
-    const savedTicket = await ticket.save();
-    res.status(201).json(savedTicket);
-  } catch (error) {
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(val => val.message);
-      return res.status(400).json({ error: messages.join(', ') });
-    }
-    res.status(500).json({ error: 'Server Error' });
+function enrichTicket(t) {
+  const end = t.resolvedAt ? new Date(t.resolvedAt) : new Date();
+  const start = new Date(t.createdAt);
+  const diffMs = end - start;
+  const ageMinutes = Math.floor(diffMs / 60000);
+
+  const targetMs = targetHours[t.priority] * 60 * 60 * 1000;
+  let slaBreached = false;
+  
+  if (t.resolvedAt) {
+    const timeToResolve = new Date(t.resolvedAt) - new Date(t.createdAt);
+    slaBreached = timeToResolve > targetMs;
+  } else {
+    const timeOpen = new Date() - new Date(t.createdAt);
+    slaBreached = timeOpen > targetMs;
   }
+
+  return { ...t, ageMinutes, slaBreached };
+}
+
+// POST /tickets
+router.post('/', (req, res) => {
+  const { subject, description, customerEmail, priority } = req.body;
+  
+  if (!subject || !description || !customerEmail || !priority) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  const ticket = {
+    _id: nextId.toString(),
+    id: nextId.toString(),
+    subject,
+    description,
+    customerEmail,
+    priority,
+    status: 'open',
+    createdAt: new Date(),
+    resolvedAt: null
+  };
+  
+  tickets.unshift(ticket);
+  nextId++;
+  
+  res.status(201).json(enrichTicket(ticket));
 });
 
 // GET /tickets/stats
-router.get('/stats', async (req, res) => {
-  try {
-    const tickets = await Ticket.find();
+router.get('/stats', (req, res) => {
+  const stats = {
+    statusCounts: { open: 0, in_progress: 0, resolved: 0, closed: 0 },
+    priorityCounts: { low: 0, medium: 0, high: 0, urgent: 0 },
+    openBreachedCount: 0
+  };
+
+  tickets.forEach(t => {
+    const enriched = enrichTicket(t);
+    stats.statusCounts[enriched.status]++;
+    stats.priorityCounts[enriched.priority]++;
     
-    const stats = {
-      statusCounts: { open: 0, in_progress: 0, resolved: 0, closed: 0 },
-      priorityCounts: { low: 0, medium: 0, high: 0, urgent: 0 },
-      openBreachedCount: 0
-    };
+    if ((enriched.status === 'open' || enriched.status === 'in_progress') && enriched.slaBreached) {
+      stats.openBreachedCount++;
+    }
+  });
 
-    tickets.forEach(t => {
-      // Convert to JSON to get virtual fields like slaBreached
-      const ticketObj = t.toJSON();
-      
-      if (stats.statusCounts[ticketObj.status] !== undefined) {
-        stats.statusCounts[ticketObj.status]++;
-      }
-      if (stats.priorityCounts[ticketObj.priority] !== undefined) {
-        stats.priorityCounts[ticketObj.priority]++;
-      }
-      
-      // count of SLA-breached tickets currently open (open or in_progress)
-      if ((ticketObj.status === 'open' || ticketObj.status === 'in_progress') && ticketObj.slaBreached) {
-        stats.openBreachedCount++;
-      }
-    });
-
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ error: 'Server Error' });
-  }
+  res.json(stats);
 });
 
 // GET /tickets
-router.get('/', async (req, res) => {
-  try {
-    const { status, priority, breached } = req.query;
-    
-    let query = {};
-    if (status) query.status = status;
-    if (priority) query.priority = priority;
+router.get('/', (req, res) => {
+  const { status, priority, breached } = req.query;
+  
+  let result = tickets.map(enrichTicket);
 
-    const tickets = await Ticket.find(query).sort({ createdAt: -1 });
-    
-    // Convert to JSON to get virtuals
-    let result = tickets.map(t => t.toJSON());
-
-    if (breached === 'true') {
-      result = result.filter(t => t.slaBreached === true);
-    } else if (breached === 'false') {
-      result = result.filter(t => t.slaBreached === false);
-    }
-
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'Server Error' });
+  if (status) result = result.filter(t => t.status === status);
+  if (priority) result = result.filter(t => t.priority === priority);
+  if (breached === 'true') {
+    result = result.filter(t => t.slaBreached === true);
+  } else if (breached === 'false') {
+    result = result.filter(t => t.slaBreached === false);
   }
+
+  res.json(result);
 });
 
 // PATCH /tickets/:id
-router.patch('/:id', async (req, res) => {
-  try {
-    const { status } = req.body;
-    const ticket = await Ticket.findById(req.params.id);
-    
-    if (!ticket) {
-      return res.status(404).json({ error: 'Ticket not found' });
-    }
-
-    if (!status) {
-      return res.status(400).json({ error: 'Status is required to update' });
-    }
-
-    const currentStatus = ticket.status;
-    
-    if (currentStatus === status) {
-      return res.json(ticket);
-    }
-
-    // Validate transition
-    if (!validTransitions[currentStatus] || !validTransitions[currentStatus].includes(status)) {
-      return res.status(400).json({ 
-        error: `Invalid transition from ${currentStatus} to ${status}. Allowed transitions are: ${validTransitions[currentStatus]?.join(', ') || 'none'}` 
-      });
-    }
-
-    // Apply rules
-    if (status === 'resolved') {
-      ticket.resolvedAt = new Date();
-    } else if (currentStatus === 'resolved' && status !== 'closed') {
-      // moving back from resolved
-      ticket.resolvedAt = null;
-    }
-
-    ticket.status = status;
-    const updatedTicket = await ticket.save();
-    
-    res.json(updatedTicket);
-  } catch (error) {
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(val => val.message);
-      return res.status(400).json({ error: messages.join(', ') });
-    }
-    res.status(500).json({ error: 'Server Error' });
+router.patch('/:id', (req, res) => {
+  const { status } = req.body;
+  const index = tickets.findIndex(t => t._id === req.params.id || t.id === req.params.id);
+  
+  if (index === -1) {
+    return res.status(404).json({ error: 'Ticket not found' });
   }
+
+  const ticket = tickets[index];
+  const currentStatus = ticket.status;
+  
+  if (currentStatus === status) {
+    return res.json(enrichTicket(ticket));
+  }
+
+  if (!validTransitions[currentStatus] || !validTransitions[currentStatus].includes(status)) {
+    return res.status(400).json({ 
+      error: `Invalid transition from ${currentStatus} to ${status}.` 
+    });
+  }
+
+  if (status === 'resolved') {
+    ticket.resolvedAt = new Date();
+  } else if (currentStatus === 'resolved' && status !== 'closed') {
+    ticket.resolvedAt = null;
+  }
+
+  ticket.status = status;
+  res.json(enrichTicket(ticket));
 });
 
 // DELETE /tickets/:id
-router.delete('/:id', async (req, res) => {
-  try {
-    const ticket = await Ticket.findByIdAndDelete(req.params.id);
-    if (!ticket) {
-      return res.status(404).json({ error: 'Ticket not found' });
-    }
-    res.json({ message: 'Ticket deleted' });
-  } catch (error) {
-    res.status(500).json({ error: 'Server Error' });
+router.delete('/:id', (req, res) => {
+  const index = tickets.findIndex(t => t._id === req.params.id || t.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Ticket not found' });
   }
+  tickets.splice(index, 1);
+  res.json({ message: 'Ticket deleted' });
 });
 
 module.exports = router;
